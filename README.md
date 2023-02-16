@@ -1,2 +1,2 @@
 # wq_sat
-Freshwater quality monitoring by remote sensing
+Freshwater quality monitoring by remote sensing, S2

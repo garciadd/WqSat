@@ -1,0 +1,2 @@
+# external requirements
+pbr>=1.8

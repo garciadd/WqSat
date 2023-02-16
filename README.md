@@ -1,2 +1,6 @@
-# wq_sat
-Freshwater quality monitoring by remote sensing, S2
+wq_sat
+=======
+
+Service to monitor the water quality of the continental water bodies through satellite data
+
+**Author/Mantainer:** [Daniel Garcia] (https://github.com/garciadd) (IFCA)

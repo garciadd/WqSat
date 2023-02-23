@@ -47,6 +47,10 @@ def get_date(tile, satellite):
     elif satellite == 'sentinel2':
         date = ((tile.split('_'))[2])[:8]
         date = datetime.datetime.strptime(date, "%Y%m%d")
+        
+    elif satellite == 'sentinel3':
+        date = ((tile.split('_'))[7])[:8]
+        date = datetime.datetime.strptime(date, "%Y%m%d")
        
     return date.strftime("%Y-%m-%d")
         

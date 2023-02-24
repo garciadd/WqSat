@@ -12,6 +12,7 @@ Advanced Computing and e-Science
 Date: Sep 2018
 """
 #imports apis
+import datetime
 import xmltodict
 import requests
 import os
@@ -47,8 +48,8 @@ class download:
         self.session = requests.Session()
 
         #Search parameters
-        self.inidate = inidate.strftime('%Y-%m-%dT%H:%M:%SZ')
-        self.enddate = enddate.strftime('%Y-%m-%dT%H:%M:%SZ')
+        self.inidate = inidate
+        self.enddate = enddate
         self.platform = platform # platform = 'Sentinel-3'
         self.satellite = 'S3A_*' 
         self.producttype = producttype # 'OL_1_EFR___'
@@ -73,8 +74,7 @@ class download:
                                                                                                         self.coord['N']),
                  'producttype': self.producttype,
                  'platformname': self.platform,
-                 'beginposition': '[{} TO {}]'.format(self.inidate, self.enddate),
-                 'cloudcoverpercentage': '[0 TO {}]'.format(self.cloud)
+                 'beginposition': '[{} TO {}]'.format(self.inidate, self.enddate)
                  }
 
         data = {'format': 'json',
@@ -85,11 +85,13 @@ class download:
                 'q': ' '.join(['{}:{}'.format(k, v) for k, v in query.items()])
                 }
 
+
         response = self.session.post(self.api_url + 'search?',
                                      data=data,
                                      auth=(self.credentials['user'], self.credentials['password']),
                                      headers={'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'})
 
+        print("Searching with user: %s" % self.credentials['user'])
         response.raise_for_status()
 
         # Parse the response
@@ -115,7 +117,6 @@ class download:
             else:
                 return False
         results[:] = [r for r in results if keep(r)]
-
         print('Found {} results from Sentinel'.format(json_feed['opensearch:totalResults']))
         print('Retrieving {} results \n'.format(len(results)))
 
@@ -134,7 +135,7 @@ class download:
 
             url_xml, url, tile_id = result['link'][1]['href'], result['link'][0]['href'], result['title']
             wrs = (tile_id.split('_'))[13]
-            date = get_date(tile_id, satellite='sentinel3')
+            date = sat_utils.get_date(tile_id, satellite='sentinel3')
             print ('Tile {} ... date {} ... wrs {}'.format(tile_id, date, wrs))
                     
             r = requests.get(url, stream=True, allow_redirects=True, auth=(self.credentials['user'],
@@ -146,12 +147,13 @@ class download:
                 wrs_path = os.path.join(self.output_path, wrs)
                 if not os.path.isdir(wrs_path):
                     os.mkdir(wrs_path)
+                elif not os.path.isdir(wrs_path + tile_id):
+                    print ('Product available at Data Hub \n')
+                    print('Downloading {} ... \n'.format(tile_id))
                 else:
                     print ('Already downloaded \n')
                     continue
-                
-                print ('Product available at Data Hub \n')
-                print('Downloading {} ... \n'.format(tile_id))
+
                 scenes.append(tile_id)
 
                 sat_utils.open_compressed(byte_stream=r.content,

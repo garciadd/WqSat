@@ -1,25 +1,17 @@
 """
 Given two dates and the coordinates, download N Sentinel Collections scenes from ESA Sentinel dataHUB.
 The downloaded Sentinel collection scenes are compatible with:
-
-Sentinel-2:
-    - S2MSI1C: Top-of-atmosphere reflectances in cartographic geometry
-    - S2MSI2A: Bottom-of-atmosphere reflectance in cartographic geometry
-    
-Sentinel-3:
-    - OL_1_EFR___: Full Resolution TOA Reflectance
-    - OL_1_ERR___: Reduced Resolution TOA Reflectance
-----------------------------------------------------------------------------------------------------------
+S2MSI1C: Top-of-atmosphere reflectances in cartographic geometry
+or S2MSI2A: Bottom-of-atmosphere reflectance in cartographic geometry
+---------------------------------------------------------------------
 
 Author: Daniel García Díaz
 Email: garciad@ifca.unican.es
-Spanish National Research Council (CSIC); Institute of Physics of Cantabria (IFCA)
+Institute of Physics of Cantabria (IFCA)
 Advanced Computing and e-Science
-Date: Apr 2023
+Date: Sep 2018
 """
-
 #imports apis
-import datetime
 import xmltodict
 import requests
 import os
@@ -31,7 +23,7 @@ from wq_sat.utils import sat_utils
 
 class download:
 
-    def __init__(self, inidate, enddate, coordinates, platform, producttype, cloud=100):
+    def __init__(self, inidate, enddate, coordinates, producttype, cloud=100, platform='Sentinel-2'):
         """
         Parameters
         ----------
@@ -51,28 +43,27 @@ class download:
         Once registered, the username and password must be added to the credentials.yaml file.
         Example: sentinel: {password: password, user: username}
         """
-        
-        # Open the request session
+
         self.session = requests.Session()
-        
+
         #Search parameters
         self.inidate = inidate.strftime('%Y-%m-%dT%H:%M:%SZ')
         self.enddate = enddate.strftime('%Y-%m-%dT%H:%M:%SZ')
         self.platform = platform
+        self.satellite = 'sentinel2'
         self.producttype = producttype
         self.cloud = int(cloud)
         self.coord = coordinates
 
         #work path
-        self.output_path = os.path.join(config.data_path(), self.platform, self.producttype)        
+        self.output_path = os.path.join(config.data_path(), self.satellite, self.producttype)        
         if not os.path.isdir(self.output_path):
             os.makedirs(self.output_path)
-        
+            
         #ESA APIs
         self.api_url = 'https://scihub.copernicus.eu/dhus/'
         self.credentials = config.load_credentials()['sentinel']
-        
-        
+
     def search(self, omit_corners=True):
 
         # Post the query to Copernicus
@@ -82,7 +73,8 @@ class download:
                                                                                                         self.coord['N']),
                  'producttype': self.producttype,
                  'platformname': self.platform,
-                 'beginposition': '[{} TO {}]'.format(self.inidate, self.enddate)
+                 'beginposition': '[{} TO {}]'.format(self.inidate, self.enddate),
+                 'cloudcoverpercentage': '[0 TO {}]'.format(self.cloud)
                  }
 
         data = {'format': 'json',
@@ -123,11 +115,12 @@ class download:
             else:
                 return False
         results[:] = [r for r in results if keep(r)]
-        print('Found {} results from {}'.format(json_feed['opensearch:totalResults'], self.platform))
+
+        print('Found {} results from Sentinel'.format(json_feed['opensearch:totalResults']))
         print('Retrieving {} results \n'.format(len(results)))
 
         return results
-    
+
     def download(self):
         
         scenes = []
@@ -137,46 +130,45 @@ class download:
         if not isinstance(results, list):
             results = [results]
 
-        downloaded, pending= [], []
-        for result in results:
+        for result in results:    
             
             url_xml, url, tile_id = result['link'][1]['href'], result['link'][0]['href'], result['title']
-            xml = requests.get(url_xml, stream=True, allow_redirects=True, auth=(self.credentials['user'],
-                                                                                 self.credentials['password']))
-
-            data = xmltodict.parse(xml.text)
-            available = data['entry']['m:properties']['d:Online']
-            
-            if available == 'true':
-                
-                r = requests.get(url, stream=True, allow_redirects=True, auth=(self.credentials['user'],
-                                                                               self.credentials['password']))
-            
-                if r.status_code == 200:
+            wrs = (tile_id.split('_'))[5]
+            date = sat_utils.get_date(tile_id, satellite='sentinel2')
+            print ('Tile {} ... date {} ... wrs {}'.format(tile_id, date, wrs))
                     
-                    downloaded.append(tile_id)
-                    if self.platform == 'Sentinel-2':
-                        tile_path = os.path.join(self.output_path, '{}.SAFE'.format(tile_id))
-                    elif self.platform == 'Sentinel-3':
-                        tile_path = os.path.join(self.output_path, '{}.SEN3'.format(tile_id))
-                        
-                    if os.path.isdir(tile_path):
-                        print ('Already downloaded \n')
-                        continue
+            r = requests.get(url, stream=True, allow_redirects=True, auth=(self.credentials['user'],
+                                                                           self.credentials['password']))
+            
+            if r.status_code == 200:
                 
-                    print('Downloading {} ... \n'.format(tile_id))
-
-                    sat_utils.open_compressed(byte_stream=r.content,
-                                              file_format='zip',
-                                              output_folder=self.output_path)
+                scenes.append(tile_id)
+                wrs_path = os.path.join(self.output_path, wrs)
+                if not os.path.isdir(wrs_path):
+                    os.mkdir(wrs_path)
                 else:
-                    pending.append(tile_id)
-                    print ('The product is offline')
-                    print ('Activating recovery mode ...')
+                    print ('Already downloaded \n')
+                    continue
+                
+                print ('Product available at Data Hub \n')
+                print('Downloading {} ... \n'.format(tile_id))
+                scenes.append(tile_id)
+
+                sat_utils.open_compressed(byte_stream=r.content,
+                                          file_format='zip',
+                                          output_folder=wrs_path)
                 
             else:
-                pending.append(tile_id)
-                print ('The product {} is offline'.format(tile_id))
-                print ('Activating recovery mode ... \n')
+                xml = requests.get(url_xml, stream=True, allow_redirects=True, auth=(self.credentials['user'],
+                                                                                     self.credentials['password']))
+
+                data = xmltodict.parse(xml.text)
+                available = data['entry']['m:properties']['d:OnDemand']
+
+                if available == 'false':
+
+                        print ('The product is offline')
+                        print ('Activating recovery mode ...')
+                        print ('{} \n'.format(url))
                 
-        return downloaded, pending
+        return scenes

@@ -1,2 +1,15 @@
 # external requirements
 pbr>=1.8
+requests
+xmltodict
+tarfile
+zipfile
+numpy
+cv2
+pandas
+scikit-learn
+matplotlib
+seaborn 
+pyyaml
+h5py
+keras

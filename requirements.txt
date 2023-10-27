@@ -2,10 +2,8 @@
 pbr>=1.8
 requests
 xmltodict
-tarfile
-zipfile
 numpy
-cv2
+opencv-python
 pandas
 scikit-learn
 matplotlib

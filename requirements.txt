@@ -5,6 +5,7 @@ xmltodict
 numpy>=1.22.4
 opencv-python
 pandas
+pillow>=8.3.2
 scikit-learn
 scikit-image
 matplotlib

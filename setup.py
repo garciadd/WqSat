@@ -10,5 +10,5 @@ setup(
     description='Service to monitor the water quality of the continental water bodies and coastal water through satellite data',
     author='CSIC',
     license='MIT',
-    setup_requires=reqs,
+    install_requires=reqs,
     pbr=True)

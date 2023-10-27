@@ -6,6 +6,7 @@ numpy>=1.22.4
 opencv-python
 pandas
 scikit-learn
+scikit-image
 matplotlib
 seaborn 
 pyyaml

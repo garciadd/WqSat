@@ -7,7 +7,7 @@ Service to monitor the water quality of the continental water bodies through sat
 
 ## Quickstart
 Modify credentials.yml and regions.yml to define your credentials for Copernicus (sentinel) services and landsat.
-Copernicus: https://scihub.copernicus.eu/userguide/SelfRegistration
+Copernicus: [https://scihub.copernicus.eu/userguide/SelfRegistration](https://dataspace.copernicus.eu/)
 Landsat: https://ers.cr.usgs.gov/
 
 For regions, please add any region you want to explore adding the coordinates limits (N,E,S,W) in regions.yml

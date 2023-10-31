@@ -26,7 +26,8 @@ RUN apt-get install -y wget \
 	python3-virtualenv \
 	unzip \
 	software-properties-common \
-	llvm
+	llvm \
+        ffmpeg libsm6 libxext6
 
 ## Install GDAL &  python-gdal
 RUN apt install -y gdal-bin python3-gdal
@@ -36,11 +37,12 @@ RUN apt-get install -y gdal-bin
 
 ## Install python APIs
 RUN pip3 install --upgrade pip
-RUN pip3 install tensorflow && \
-    pip3 install numpy pandas sklearn matplotlib seaborn jupyterlab pyyaml h5py && \
-    pip3 install keras --no-deps
+RUN pip3 install jupyter notebook
+RUN ls -lahS
+RUN git clone https://github.com/ferag/wq_sat.git
+WORKDIR wq_sat
+RUN python3 setup.py install
 
-WORKDIR home
 
 EXPOSE 8888
 

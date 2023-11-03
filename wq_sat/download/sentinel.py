@@ -23,6 +23,7 @@ import datetime
 import xmltodict
 import requests
 import os
+import pandas as pd
 
 # Subfunctions
 from wq_sat import config
@@ -58,7 +59,7 @@ class download:
         #Search parameters
         self.inidate = inidate.strftime('%Y-%m-%dT%H:%M:%SZ')
         self.enddate = enddate.strftime('%Y-%m-%dT%H:%M:%SZ')
-        self.platform = platform
+        self.platform = platform.upper() #All caps
         self.producttype = producttype
         self.cloud = int(cloud)
         self.coord = coordinates
@@ -69,46 +70,46 @@ class download:
             os.makedirs(self.output_path)
         
         #ESA APIs
-        self.api_url = 'https://scihub.copernicus.eu/dhus/'
+        self.api_url = 'https://catalogue.dataspace.copernicus.eu/odata/v1/Products?'
         self.credentials = config.load_credentials()['sentinel']
         
         
+    def get_keycloak(self):
+        data = {
+            "client_id": "cdse-public",
+            "username": self.credentials['user'],
+            "password": self.credentials['password'],
+            "grant_type": "password",
+            }
+        try:
+            r = requests.post("https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token",
+            data=data,
+            )
+            r.raise_for_status()
+        except Exception as e:
+            raise Exception(
+                f"Keycloak token creation failed. Reponse from the server was: {r.json()}"
+                )
+        return r.json()["access_token"]
+    
+    
     def search(self, omit_corners=True):
 
         # Post the query to Copernicus
-        query = {'footprint': '"Intersects(POLYGON(({0} {1},{2} {1},{2} {3},{0} {3},{0} {1})))"'.format(self.coord['W'],
-                                                                                                        self.coord['S'],
-                                                                                                        self.coord['E'],
-                                                                                                        self.coord['N']),
-                 'producttype': self.producttype,
-                 'platformname': self.platform,
-                 'beginposition': '[{} TO {}]'.format(self.inidate, self.enddate)
-                 }
-
-        data = {'format': 'json',
-                'start': 0,  # offset
-                'rows': 100,
-                'limit': 100,
-                'orderby': '',
-                'q': ' '.join(['{}:{}'.format(k, v) for k, v in query.items()])
-                }
-
-        response = self.session.post(self.api_url + 'search?',
-                                     data=data,
-                                     auth=(self.credentials['user'], self.credentials['password']),
-                                     headers={'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'})
+        footprint = 'POLYGON(({0} {1},{2} {1},{2} {3},{0} {3},{0} {1}))'.format(self.coord['W'],
+                                                                                self.coord['S'],
+                                                                                self.coord['E'],
+                                                                                self.coord['N'])
+        if self.platform == 'SENTINEL-2':
+            url_query = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=Collection/Name eq '{self.platform}' and OData.CSC.Intersects(area=geography'SRID=4326;{footprint}') and ContentDate/Start gt {self.inidate} and ContentDate/Start lt {self.enddate} and Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value lt {self.cloud}) and Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{self.producttype}')"
+        elif self.platform == 'SENTINEL-3':
+            url_query = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=Collection/Name eq '{self.platform}' and OData.CSC.Intersects(area=geography'SRID=4326;{footprint}') and ContentDate/Start gt {self.inidate} and ContentDate/Start lt {self.enddate} and Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{self.producttype}')"
+        response = self.session.get(url_query)
 
         response.raise_for_status()
 
         # Parse the response
-        json_feed = response.json()['feed']
-
-        if 'entry' in json_feed.keys():
-            results = json_feed['entry']
-            if isinstance(results, dict):  # if the query returns only one product, products will be a dict not a list
-                results = [results]
-        else:
-            results = []
+        json_feed = response.json()
 
         # Remove results that are mainly corners
         def keep(r):
@@ -122,8 +123,7 @@ class download:
                 return True
             else:
                 return False
-        results[:] = [r for r in results if keep(r)]
-        print('Found {} results from {}'.format(json_feed['opensearch:totalResults'], self.platform))
+        results = pd.DataFrame.from_dict(json_feed['value'])
         print('Retrieving {} results \n'.format(len(results)))
 
         return results
@@ -134,49 +134,52 @@ class download:
         
         #results of the search
         results = self.search()
-        if not isinstance(results, list):
-            results = [results]
 
         downloaded, pending= [], []
-        for result in results:
-            
-            url_xml, url, tile_id = result['link'][1]['href'], result['link'][0]['href'], result['title']
-            xml = requests.get(url_xml, stream=True, allow_redirects=True, auth=(self.credentials['user'],
-                                                                                 self.credentials['password']))
-
-            data = xmltodict.parse(xml.text)
-            available = data['entry']['m:properties']['d:Online']
-            
-            if available == 'true':
+        keycloak_token = self.get_keycloak()
+        session = requests.Session()
+        session.headers.update({'Authorization': f'Bearer {keycloak_token}'})
+        print("Authorized OK")
+        for index, row in results.iterrows():
+            print("Product online? %s" % row['Online'])            
+            if row['Online'] and (self.producttype):
+                url = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(%s)/$value" % row['Id']
+                print("Downloading %s" % url)
                 
-                r = requests.get(url, stream=True, allow_redirects=True, auth=(self.credentials['user'],
-                                                                               self.credentials['password']))
-            
-                if r.status_code == 200:
-                    
-                    downloaded.append(tile_id)
-                    if self.platform == 'Sentinel-2':
-                        tile_path = os.path.join(self.output_path, '{}.SAFE'.format(tile_id))
-                    elif self.platform == 'Sentinel-3':
-                        tile_path = os.path.join(self.output_path, '{}.SEN3'.format(tile_id))
+                response = session.get(url, allow_redirects=False)
+                while response.status_code in (301, 302, 303, 307):
+                    url = response.headers['Location']
+                    response = session.get(url, allow_redirects=False)
+                
+                file = session.get(url, stream=True, verify=False, allow_redirects=True)
+                
+                print("Status code %s" % file.status_code)
+                if file.status_code == 200:
+                    downloaded.append(row['Name'])
+                    if self.platform == 'SENTINEL-2':
+                        print("Saving in... %s/%s" % (self.output_path, '{}.SAFE'.format(row['Name'])))
+                        tile_path = os.path.join(self.output_path, '{}.SAFE'.format(row['Name']))
+                    elif self.platform == 'SENTINEL-3':
+                        print("Saving in... %s/%s" % (self.output_path, '{}.SEN3'.format(row['Name'])))
+                        tile_path = os.path.join(self.output_path, '{}.SEN3'.format(row['Name']))
                         
                     if os.path.isdir(tile_path):
                         print ('Already downloaded \n')
                         continue
                 
-                    print('Downloading {} ... \n'.format(tile_id))
+                    print('Downloading {} ... \n'.format(row['Name']))
 
-                    sat_utils.open_compressed(byte_stream=r.content,
+                    sat_utils.open_compressed(byte_stream=file.content,
                                               file_format='zip',
                                               output_folder=self.output_path)
                 else:
-                    pending.append(tile_id)
+                    pending.append(row['Name'])
                     print ('The product is offline')
                     print ('Activating recovery mode ...')
                 
             else:
-                pending.append(tile_id)
-                print ('The product {} is offline'.format(tile_id))
+                pending.append(row['Name'])
+                print ('The product {} is offline'.format(row['Name']))
                 print ('Activating recovery mode ... \n')
                 
         return downloaded, pending

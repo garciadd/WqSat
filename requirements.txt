@@ -14,3 +14,7 @@ pyyaml
 h5py
 keras
 werkzeug
+NetCDF4
+rioxarray
+xarray
+rasterio

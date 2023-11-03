@@ -59,7 +59,7 @@ class download:
         #Search parameters
         self.inidate = inidate.strftime('%Y-%m-%dT%H:%M:%SZ')
         self.enddate = enddate.strftime('%Y-%m-%dT%H:%M:%SZ')
-        self.platform = platform
+        self.platform = platform.upper() #All caps
         self.producttype = producttype
         self.cloud = int(cloud)
         self.coord = coordinates
@@ -100,9 +100,10 @@ class download:
                                                                                 self.coord['S'],
                                                                                 self.coord['E'],
                                                                                 self.coord['N'])
-
-        url_query = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=Collection/Name eq '{self.platform}' and OData.CSC.Intersects(area=geography'SRID=4326;{footprint}') and ContentDate/Start gt {self.inidate} and ContentDate/Start lt {self.enddate} and Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value lt {self.cloud}) and Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{self.producttype}')"
-        print("QUERY: %s" % url_query)
+        if self.platform == 'SENTINEL-2':
+            url_query = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=Collection/Name eq '{self.platform}' and OData.CSC.Intersects(area=geography'SRID=4326;{footprint}') and ContentDate/Start gt {self.inidate} and ContentDate/Start lt {self.enddate} and Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value lt {self.cloud}) and Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{self.producttype}')"
+        elif self.platform == 'SENTINEL-3':
+            url_query = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=Collection/Name eq '{self.platform}' and OData.CSC.Intersects(area=geography'SRID=4326;{footprint}') and ContentDate/Start gt {self.inidate} and ContentDate/Start lt {self.enddate} and Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{self.producttype}')"
         response = self.session.get(url_query)
 
         response.raise_for_status()
@@ -140,7 +141,7 @@ class download:
         session.headers.update({'Authorization': f'Bearer {keycloak_token}'})
         print("Authorized OK")
         for index, row in results.iterrows():
-            print("Product online? %s" % type(row['Online']))            
+            print("Product online? %s" % row['Online'])            
             if row['Online'] and (self.producttype):
                 url = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(%s)/$value" % row['Id']
                 print("Downloading %s" % url)

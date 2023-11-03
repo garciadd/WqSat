@@ -4,7 +4,7 @@ from skimage import exposure
 import yaml
 from werkzeug.exceptions import BadRequest
 
-homedir = os.path.dirname(os.path.abspath(__file__))
+homedir = "/wq_sat/wq_sat/"
 
 def base_dir():
     return homedir

@@ -38,7 +38,6 @@ RUN apt-get install -y gdal-bin
 ## Install python APIs
 RUN pip3 install --upgrade pip
 RUN pip3 install jupyter notebook
-RUN ls -la
 RUN git clone https://github.com/ferag/wq_sat.git
 USER root
 WORKDIR wq_sat
@@ -47,8 +46,8 @@ RUN python3 setup.py install
 RUN git clone --branch 20220222.0 https://github.com/acolite/acolite.git
 
 EXPOSE 8888
+
 RUN pip3 install -e .
 
 ## Starts up the notebook
 CMD ["jupyter", "notebook", "--port=8888", "--no-browser", "--ip=0.0.0.0", "--allow-root"]
-

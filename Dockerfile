@@ -38,7 +38,7 @@ RUN apt-get install -y gdal-bin
 ## Install python APIs
 RUN pip3 install --upgrade pip
 RUN pip3 install jupyter notebook
-RUN git clone https://github.com/ferag/wq_sat.git
+RUN git clone https://github.com/garciadd/wq_sat.git
 USER root
 WORKDIR wq_sat
 RUN python3 setup.py install

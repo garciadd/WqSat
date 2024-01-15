@@ -32,7 +32,7 @@ from wq_sat.utils import sat_utils
 
 class download:
 
-    def __init__(self, inidate, enddate, coordinates, platform, producttype, cloud=100):
+    def __init__(self, start_date, end_date, coordinates, platform, product_type, cloud=100):
         """
         Parameters
         ----------
@@ -57,10 +57,10 @@ class download:
         self.session = requests.Session()
         
         #Search parameters
-        self.inidate = inidate.strftime('%Y-%m-%dT%H:%M:%SZ')
-        self.enddate = enddate.strftime('%Y-%m-%dT%H:%M:%SZ')
+        self.start_date = start_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+        self.end_date = end_date.strftime('%Y-%m-%dT%H:%M:%SZ')
         self.platform = platform.upper() #All caps
-        self.producttype = producttype
+        self.producttype = product_type
         self.cloud = int(cloud)
         self.coord = coordinates
 
@@ -101,9 +101,9 @@ class download:
                                                                                 self.coord['E'],
                                                                                 self.coord['N'])
         if self.platform == 'SENTINEL-2':
-            url_query = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=Collection/Name eq '{self.platform}' and OData.CSC.Intersects(area=geography'SRID=4326;{footprint}') and ContentDate/Start gt {self.inidate} and ContentDate/Start lt {self.enddate} and Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value lt {self.cloud}) and Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{self.producttype}')"
+            url_query = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=Collection/Name eq '{self.platform}' and OData.CSC.Intersects(area=geography'SRID=4326;{footprint}') and ContentDate/Start gt {self.start_date} and ContentDate/Start lt {self.end_date} and Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value lt {self.cloud}) and Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{self.producttype}')"
         elif self.platform == 'SENTINEL-3':
-            url_query = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=Collection/Name eq '{self.platform}' and OData.CSC.Intersects(area=geography'SRID=4326;{footprint}') and ContentDate/Start gt {self.inidate} and ContentDate/Start lt {self.enddate} and Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{self.producttype}')"
+            url_query = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=Collection/Name eq '{self.platform}' and OData.CSC.Intersects(area=geography'SRID=4326;{footprint}') and ContentDate/Start gt {self.start_date} and ContentDate/Start lt {self.end_date} and Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{self.producttype}')"
         response = self.session.get(url_query)
 
         response.raise_for_status()
@@ -111,18 +111,18 @@ class download:
         # Parse the response
         json_feed = response.json()
 
-        # Remove results that are mainly corners
-        def keep(r):
-            for item in r['str']:
-                if item['name'] == 'size':
-                    units = item['content'].split(' ')[1]
-                    mult = {'KB': 1, 'MB': 1e3, 'GB': 1e6}[units]
-                    size = float(item['content'].split(' ')[0]) * mult
-                    break
-            if size > 0.5e6:  # 500MB
-                return True
-            else:
-                return False
+        # # Remove results that are mainly corners
+        # def keep(r):
+        #     for item in r['str']:
+        #         if item['name'] == 'size':
+        #             units = item['content'].split(' ')[1]
+        #             mult = {'KB': 1, 'MB': 1e3, 'GB': 1e6}[units]
+        #             size = float(item['content'].split(' ')[0]) * mult
+        #             break
+        #     if size > 0.5e6:  # 500MB
+        #         return True
+        #     else:
+        #         return False
         results = pd.DataFrame.from_dict(json_feed['value'])
         print('Retrieving {} results \n'.format(len(results)))
 
@@ -130,22 +130,18 @@ class download:
     
     def download(self):
         
-        scenes = []
-        
         #results of the search
         results = self.search()
-
         downloaded, pending= [], []
         keycloak_token = self.get_keycloak()
         session = requests.Session()
         session.headers.update({'Authorization': f'Bearer {keycloak_token}'})
         print("Authorized OK")
         for index, row in results.iterrows():
-            print("Product online? %s" % row['Online'])            
+            print(f"Product online? {row['Online']}")            
             if row['Online'] and (self.producttype):
                 url = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(%s)/$value" % row['Id']
-                print("Downloading %s" % url)
-                
+                print(f"Downloading {url}")
                 response = session.get(url, allow_redirects=False)
                 while response.status_code in (301, 302, 303, 307):
                     url = response.headers['Location']
@@ -153,22 +149,21 @@ class download:
                 
                 file = session.get(url, stream=True, verify=False, allow_redirects=True)
                 
-                print("Status code %s" % file.status_code)
+                print(f"Status code {file.status_code}")
                 if file.status_code == 200:
                     downloaded.append(row['Name'])
                     if self.platform == 'SENTINEL-2':
-                        print("Saving in... %s/%s" % (self.output_path, '{}.SAFE'.format(row['Name'])))
-                        tile_path = os.path.join(self.output_path, '{}.SAFE'.format(row['Name']))
+                        tile_path = os.path.join(self.output_path, row['Name'])
                     elif self.platform == 'SENTINEL-3':
-                        print("Saving in... %s/%s" % (self.output_path, '{}.SEN3'.format(row['Name'])))
-                        tile_path = os.path.join(self.output_path, '{}.SEN3'.format(row['Name']))
+                        tile_path = os.path.join(self.output_path, row['Name'])
                         
                     if os.path.isdir(tile_path):
                         print ('Already downloaded \n')
                         continue
-                
+                        
                     print('Downloading {} ... \n'.format(row['Name']))
-
+                    print(f"Saving in... {tile_path}")
+                    
                     sat_utils.open_compressed(byte_stream=file.content,
                                               file_format='zip',
                                               output_folder=self.output_path)

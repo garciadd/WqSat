@@ -35,20 +35,19 @@ def acolite_path(tile):
     if tile.startswith('S2'):
         return os.path.join(data_path(), 'SENTINEL-2', 'ACOLITE', tile)
             
-# def get_regions():
-#     if not os.path.isfile(os.path.join(base_dir(), 'regions.yaml')):
-#         raise BadRequest('You must create a regions.yaml file to store the coordinates')
+def get_regions():
+    if not os.path.isfile(os.path.join(base_dir(), 'regions.yaml')):
+        raise BadRequest('You must create a regions.yaml file to store the coordinates')
     
-#     with open(os.path.join(base_dir(), 'regions.yaml'), 'r') as f:
-#         regions = yaml.safe_load(f)
-        
-#     return regions 
+    with open(os.path.join(base_dir(), 'regions.yaml'), 'r') as f:
+        regions = yaml.safe_load(f)
+    return regions 
 
-# def load_coordinates(region):
+def load_coordinates(region):
    
-#     regions = get_regions()
+    regions = get_regions()
     
-#     if region in regions.keys():
-#         return regions[region]
-#     else:
-#         raise BadRequest('Invalid region name. Please review the Regions.yaml file')
+    if region in regions.keys():
+        return regions[region]
+    else:
+        raise BadRequest('Invalid region name. Please review the Regions.yaml file')

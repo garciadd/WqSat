@@ -20,10 +20,10 @@ Date: Apr 2023
 
 #imports apis
 import datetime
-import xmltodict
 import requests
 import os
 import pandas as pd
+from tqdm import tqdm
 
 # Subfunctions
 from wq_sat import config
@@ -141,32 +141,54 @@ class download:
             print(f"Product online? {row['Online']}")            
             if row['Online'] and (self.producttype):
                 url = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(%s)/$value" % row['Id']
+                if self.platform == 'SENTINEL-2':
+                    tile_path = os.path.join(self.output_path, row['Name'])
+                elif self.platform == 'SENTINEL-3':
+                    tile_path = os.path.join(self.output_path, row['Name'])
+                if os.path.isdir(tile_path):
+                    print ('Already downloaded \n')
+                    break
                 print(f"Downloading {url}")
-                response = session.get(url, allow_redirects=False)
-                while response.status_code in (301, 302, 303, 307):
+                response = session.head(url, allow_redirects=False)
+                print("After head")
+                if response.status_code in (301, 302, 303, 307):
                     url = response.headers['Location']
-                    response = session.get(url, allow_redirects=False)
-                
-                file = session.get(url, stream=True, verify=False, allow_redirects=True)
-                
-                print(f"Status code {file.status_code}")
-                if file.status_code == 200:
+                    print(url)
+                    #response = session.get(url, allow_redirects=False)
+                response = session.get(url, stream=True)
+
+                print(f"Status code {response.status_code}")
+                if response.status_code == 200:
+
+                    total_size = int(response.headers.get('content-length', 0))
+                    chunk_size = 1024  # Define the chunk size
+
+                    # Initialize an empty byte array to hold the data
+                    data = bytearray()
+
+                    with tqdm(
+                        desc="Downloading",
+                        total=total_size,
+                        unit='iB',
+                        unit_scale=True,
+                        unit_divisor=1024,
+                    ) as bar:
+                        for chunk in response.iter_content(chunk_size=chunk_size):
+                            # Update the byte array with the chunk
+                            data.extend(chunk)
+                            # Update the progress bar
+                            bar.update(len(chunk))
+
+
                     downloaded.append(row['Name'])
-                    if self.platform == 'SENTINEL-2':
-                        tile_path = os.path.join(self.output_path, row['Name'])
-                    elif self.platform == 'SENTINEL-3':
-                        tile_path = os.path.join(self.output_path, row['Name'])
-                        
-                    if os.path.isdir(tile_path):
-                        print ('Already downloaded \n')
-                        continue
-                        
+
                     print('Downloading {} ... \n'.format(row['Name']))
                     print(f"Saving in... {tile_path}")
-                    
-                    sat_utils.open_compressed(byte_stream=file.content,
+
+                    sat_utils.open_compressed(byte_stream=data,
                                               file_format='zip',
                                               output_folder=self.output_path)
+            
                 else:
                     pending.append(row['Name'])
                     print ('The product is offline')

@@ -1,0 +1,18 @@
+satellite: "SENTINEL-2"
+start_date: "2024-01-01"
+end_date: "2024-01-15"
+coordinates:
+  N: 39.8
+  S: 39.2
+  E: 3.6
+  W: 2.9
+product_type: "S2MSI2A"
+cloud: 20
+DOS: true
+acolite: false
+window: None
+temporal_composite: None
+spatial_composite: true
+sr_method: wavelets
+bands: [B2, B3, B4, B5, B8]
+output_format: GeoTIFF
